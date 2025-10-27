@@ -104,6 +104,9 @@ def control_acceso():
     cv2.destroyAllWindows()
 
 # --- Inicio ---
+
 if __name__ == "__main__":
     print("=== SISTEMA DE ACCESO AL DATA CENTER ===")
     control_acceso()
+    os.system("python reporte_datacenter.py")
+
