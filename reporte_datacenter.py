@@ -1,4 +1,3 @@
-# reporte_datacenter.py
 import os
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -13,17 +12,17 @@ def _parse_hf(x: str):
     except Exception:
         return None
 
-def generar_graficos_tres():
+def generar_reportes():
     if not os.path.exists(ARCHIVO_AUTORIZADOS):
-        print(f"⚠️ No existe {ARCHIVO_AUTORIZADOS}")
+        print(f"No existe {ARCHIVO_AUTORIZADOS}")
         return
 
     df = pd.read_csv(ARCHIVO_AUTORIZADOS, dtype=str, keep_default_na=False)
     if df.empty:
-        print("⚠️ No hay datos para graficar.")
+        print("No hay datos para graficar.")
         return
 
-    # Normalizar columnas
+    # Normalizar columnas esperadas
     for col in ["Nombre", "Accion", "Hora_Fecha", "Duracion_min"]:
         if col not in df.columns:
             df[col] = ""
@@ -32,7 +31,7 @@ def generar_graficos_tres():
     df["dt"] = df["Hora_Fecha"].apply(_parse_hf)
     df = df.dropna(subset=["dt"]).copy()
 
-    # 1) Ingresos por persona
+    # 1) Ingresos por persona (barras)
     df_ing = df[df["Accion"] == "ingreso"].copy()
     ingresos_por_persona = df_ing["Nombre"].value_counts().sort_values(ascending=False)
     if not ingresos_por_persona.empty:
@@ -43,9 +42,9 @@ def generar_graficos_tres():
         plt.xticks(rotation=45, ha="right")
         plt.tight_layout(); plt.show()
     else:
-        print("ℹ️ No hay ingresos para graficar (Ingresos por persona).")
+        print("No hay ingresos para graficar.")
 
-    # 2) Promedio de permanencia (min)
+    # 2) Promedio de permanencia (barras, min)
     df_egr = df[df["Accion"] == "egreso"].copy()
     df_egr["Duracion_min"] = pd.to_numeric(df_egr["Duracion_min"], errors="coerce")
     df_egr = df_egr.dropna(subset=["Duracion_min"])
@@ -58,9 +57,9 @@ def generar_graficos_tres():
         plt.xticks(rotation=45, ha="right")
         plt.tight_layout(); plt.show()
     else:
-        print("ℹ️ No hay egresos con duración para graficar (Promedio de permanencia).")
+        print("No hay egresos con duración para graficar.")
 
-    # 3) Evolución diaria (ingresos por día)
+    # 3) Evolución diaria (línea)
     if not df_ing.empty:
         df_ing["Fecha"] = df_ing["dt"].dt.date
         ingresos_por_dia = df_ing["Fecha"].value_counts().sort_index()
@@ -73,12 +72,10 @@ def generar_graficos_tres():
             plt.xticks(rotation=45, ha="right")
             plt.tight_layout(); plt.show()
         else:
-            print("ℹ️ No hay ingresos con fecha válida para graficar (Evolución diaria).")
-    else:
-        print("ℹ️ No hay ingresos para graficar (Evolución diaria).")
+            print("No hay ingresos con fecha válida para graficar.")
 
 if __name__ == "__main__":
-    generar_graficos_tres()
+    generar_reportes()
 
 
 
