@@ -1,106 +1,84 @@
+# reporte_datacenter.py
+import os
 import pandas as pd
 import matplotlib.pyplot as plt
 from datetime import datetime
-import os
 
-# === CONFIGURACIÓN DE RUTAS ===
-carpeta = "data/registros"
-archivo_accesos = os.path.join(carpeta, "accesos.csv")
-archivo_intentos = os.path.join(carpeta, "intentos_no_aut.csv")
-salida_grafico = os.path.join(carpeta, "reporte_grafico.png")
+RUTA_REGISTROS = "data/registros"
+ARCHIVO_AUTORIZADOS = os.path.join(RUTA_REGISTROS, "accesos_autorizados.csv")
 
-# === VERIFICACIÓN DE ARCHIVOS ===
-if not os.path.exists(archivo_accesos):
-    print("No se encontraron registros de accesos.")
-    exit()
+def _parse_hf(x: str):
+    try:
+        return datetime.strptime(x, "%H:%M:%S del %d-%m-%Y")
+    except Exception:
+        return None
 
-# === LECTURA DE REGISTROS ===
-accesos = pd.read_csv(archivo_accesos)
-print("Registros de accesos cargados correctamente")
+def generar_graficos_tres():
+    if not os.path.exists(ARCHIVO_AUTORIZADOS):
+        print(f"⚠️ No existe {ARCHIVO_AUTORIZADOS}")
+        return
 
-# Normalizar nombres de columnas (corrige errores de formato)
-accesos.columns = [col.strip().capitalize() for col in accesos.columns]
-if "Nombre" not in accesos.columns:
-    accesos.columns = ["Nombre", "Hora", "Fecha"]
+    df = pd.read_csv(ARCHIVO_AUTORIZADOS, dtype=str, keep_default_na=False)
+    if df.empty:
+        print("⚠️ No hay datos para graficar.")
+        return
 
-# Cargar intentos no autorizados (si existen)
-if os.path.exists(archivo_intentos):
-    intentos = pd.read_csv(archivo_intentos)
-    intentos.columns = [col.strip().capitalize() for col in intentos.columns]
-    if "Nombre" not in intentos.columns:
-        intentos.columns = ["Nombre", "Hora", "Fecha"]
-else:
-    intentos = pd.DataFrame(columns=["Nombre", "Hora", "Fecha"])
+    # Normalizar columnas
+    for col in ["Nombre", "Accion", "Hora_Fecha", "Duracion_min"]:
+        if col not in df.columns:
+            df[col] = ""
 
-# === ANÁLISIS DE DATOS ===
-total_accesos = len(accesos)
-total_intentos = len(intentos)
-total_eventos = total_accesos + total_intentos
-porcentaje_validos = (total_accesos / total_eventos * 100) if total_eventos > 0 else 0
+    # Timestamp usable
+    df["dt"] = df["Hora_Fecha"].apply(_parse_hf)
+    df = df.dropna(subset=["dt"]).copy()
 
-# Conteo de accesos por persona
-conteo_por_persona = accesos["Nombre"].value_counts()
-persona_top = conteo_por_persona.idxmax() if not conteo_por_persona.empty else "N/A"
-accesos_top = conteo_por_persona.max() if not conteo_por_persona.empty else 0
+    # 1) Ingresos por persona
+    df_ing = df[df["Accion"] == "ingreso"].copy()
+    ingresos_por_persona = df_ing["Nombre"].value_counts().sort_values(ascending=False)
+    if not ingresos_por_persona.empty:
+        plt.figure(figsize=(9,5))
+        ingresos_por_persona.plot(kind="bar")
+        plt.title("Ingresos por persona")
+        plt.xlabel("Persona"); plt.ylabel("Ingresos")
+        plt.xticks(rotation=45, ha="right")
+        plt.tight_layout(); plt.show()
+    else:
+        print("ℹ️ No hay ingresos para graficar (Ingresos por persona).")
 
-# === RESUMEN TEXTUAL ===
-print("\n=== REPORTE DE CONTROL DE ACCESOS AL DATA CENTER ===")
-print(f"Fecha del reporte: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-print("------------------------------------------------------")
-print(f"Total de accesos válidos: {total_accesos}")
-print(f"Total de intentos no autorizados: {total_intentos}")
-print(f"Porcentaje de accesos válidos: {porcentaje_validos:.2f}%")
-print(f"Persona con más ingresos: {persona_top} ({accesos_top} veces)")
-print("------------------------------------------------------\n")
+    # 2) Promedio de permanencia (min)
+    df_egr = df[df["Accion"] == "egreso"].copy()
+    df_egr["Duracion_min"] = pd.to_numeric(df_egr["Duracion_min"], errors="coerce")
+    df_egr = df_egr.dropna(subset=["Duracion_min"])
+    if not df_egr.empty:
+        prom_permanencia = df_egr.groupby("Nombre")["Duracion_min"].mean().sort_values(ascending=False)
+        plt.figure(figsize=(9,5))
+        prom_permanencia.plot(kind="bar")
+        plt.title("Promedio de permanencia (min)")
+        plt.xlabel("Persona"); plt.ylabel("Minutos (promedio)")
+        plt.xticks(rotation=45, ha="right")
+        plt.tight_layout(); plt.show()
+    else:
+        print("ℹ️ No hay egresos con duración para graficar (Promedio de permanencia).")
 
-# === GENERACIÓN DE GRÁFICOS ===
-plt.figure(figsize=(12, 6))
+    # 3) Evolución diaria (ingresos por día)
+    if not df_ing.empty:
+        df_ing["Fecha"] = df_ing["dt"].dt.date
+        ingresos_por_dia = df_ing["Fecha"].value_counts().sort_index()
+        if not ingresos_por_dia.empty:
+            plt.figure(figsize=(9,5))
+            plt.plot(ingresos_por_dia.index.astype(str), ingresos_por_dia.values, marker="o")
+            plt.title("Evolución diaria de ingresos")
+            plt.xlabel("Fecha"); plt.ylabel("Cantidad de ingresos")
+            plt.grid(True, linestyle="--", alpha=0.5)
+            plt.xticks(rotation=45, ha="right")
+            plt.tight_layout(); plt.show()
+        else:
+            print("ℹ️ No hay ingresos con fecha válida para graficar (Evolución diaria).")
+    else:
+        print("ℹ️ No hay ingresos para graficar (Evolución diaria).")
 
-# Subplot 1: Barras (accesos por persona)
-plt.subplot(1, 2, 1)
-conteo_por_persona.plot(kind="bar", color="#1f77b4")
-plt.title("Accesos válidos por persona", fontsize=13, fontweight="bold")
-plt.xlabel("Personal autorizado")
-plt.ylabel("Cantidad de ingresos")
-plt.xticks(rotation=45, ha="right")
-
-# Subplot 2: Torta (porcentaje válidos vs no autorizados)
-plt.subplot(1, 2, 2)
-plt.pie(
-    [total_accesos, total_intentos],
-    labels=["Válidos", "No autorizados"],
-    autopct="%1.1f%%",
-    startangle=90,
-    colors=["#2ca02c", "#d62728"]
-)
-plt.title("Distribución de accesos", fontsize=13, fontweight="bold")
-
-plt.suptitle(" Reporte de Accesos al Data Center", fontsize=15, fontweight="bold")
-plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-
-# Guardar y mostrar
-plt.savefig(salida_grafico)
-plt.show()
-
-# === GUARDAR RESUMEN CSV ===
-reporte = {
-    "Fecha": [datetime.now().strftime('%Y-%m-%d %H:%M:%S')],
-    "Total_Accesos": [total_accesos],
-    "Intentos_No_Aut": [total_intentos],
-    "Porcentaje_Validos": [round(porcentaje_validos, 2)],
-    "Top_Persona": [persona_top],
-    "Top_Cantidad": [accesos_top]
-}
-
-df_reporte = pd.DataFrame(reporte)
-reporte_path = os.path.join(carpeta, "reporte_resumen.csv")
-df_reporte.to_csv(
-    reporte_path,
-    mode="a",
-    index=False,
-    header=not os.path.exists(reporte_path) or os.path.getsize(reporte_path) == 0
-)
+if __name__ == "__main__":
+    generar_graficos_tres()
 
 
-print(f" Reporte visual guardado en: {salida_grafico}")
-print(" Resumen CSV actualizado en: data/registros/reporte_resumen.csv")
+
